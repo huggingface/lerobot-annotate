@@ -92,7 +92,7 @@ label {
   color: var(--muted);
 }
 
-input, select, button {
+input, select, textarea, button {
   font-family: inherit;
   border-radius: 12px;
   border: 1px solid var(--border);
@@ -101,9 +101,14 @@ input, select, button {
   color: var(--text);
 }
 
-input:focus, select:focus {
+input:focus, select:focus, textarea:focus {
   outline: 2px solid rgba(249, 115, 22, 0.6);
   border-color: transparent;
+}
+
+textarea {
+  min-height: 72px;
+  resize: vertical;
 }
 
 button {
@@ -199,6 +204,25 @@ video {
   background: #050505;
 }
 
+.video-stage {
+  position: relative;
+  display: block;
+}
+
+.video-stage video {
+  display: block;
+}
+
+.vqa-canvas {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  border-radius: 12px;
+  pointer-events: auto;
+  touch-action: none;
+}
+
 /* Video time display with millisecond precision */
 .video-time-display {
   display: flex;
@@ -232,13 +256,13 @@ video {
 }
 
 .timeline {
+  position: relative;
   margin-top: 12px;
   background: rgba(148, 163, 184, 0.1);
   border-radius: 10px;
   padding: 6px;
   min-height: 22px;
-  display: flex;
-  gap: 4px;
+  overflow: hidden;
 }
 
 .timeline span {
@@ -246,6 +270,15 @@ video {
   height: 12px;
   border-radius: 6px;
   background: var(--accent-2);
+}
+
+.timeline-tick {
+  position: absolute;
+  top: 3px;
+  width: 4px;
+  min-width: 4px;
+  height: 16px;
+  transform: translateX(-2px);
 }
 
 .tabs {
@@ -291,13 +324,84 @@ video {
 
 .segment-item {
   display: grid;
-  grid-template-columns: 36px 80px 80px 1fr auto;
+  grid-template-columns: minmax(56px, auto) 96px minmax(0, 1fr) auto;
   gap: 12px;
   align-items: center;
   padding: 10px;
   border-radius: 12px;
   border: 1px solid var(--border);
   background: rgba(31, 41, 55, 0.7);
+}
+
+.segment-item.vqa-row {
+  grid-template-columns: minmax(56px, auto) 96px minmax(0, 1fr) auto auto;
+}
+
+.badge-stack {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.style-badge,
+.vqa-kind {
+  display: inline-flex;
+  width: fit-content;
+  align-items: center;
+  border-radius: 999px;
+  border: 1px solid rgba(148, 163, 184, 0.32);
+  padding: 3px 8px;
+  font-size: 0.72rem;
+  font-weight: 700;
+  line-height: 1;
+  text-transform: uppercase;
+}
+
+.style-subtask {
+  color: #67e8f9;
+  background: rgba(6, 182, 212, 0.14);
+}
+
+.style-plan {
+  color: #c4b5fd;
+  background: rgba(167, 139, 250, 0.14);
+}
+
+.style-memory {
+  color: #86efac;
+  background: rgba(52, 211, 153, 0.14);
+}
+
+.style-interjection {
+  color: #fdba74;
+  background: rgba(249, 115, 22, 0.14);
+}
+
+.style-vqa {
+  color: #fde68a;
+  background: rgba(250, 204, 21, 0.14);
+}
+
+.style-speech {
+  color: #e2e8f0;
+  background: rgba(148, 163, 184, 0.14);
+}
+
+.vqa-summary {
+  min-width: 0;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  overflow: hidden;
+}
+
+.vqa-answer {
+  min-width: 120px;
+  max-width: 45%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: #cbd5e1;
 }
 
 .segment-item .segment-inputs {
