@@ -10,9 +10,12 @@
   <div id="app">
     <header class="hero">
       <div>
-        <p class="eyebrow">LeRobot • Annotation Studio</p>
-        <h1>Label episodes with subtasks and dialogue.</h1>
-        <p class="subhead">Load any LeRobot dataset, step through episodes, and export parquet updates ready for training.</p>
+        <p class="eyebrow">LeRobot • Language Annotation Studio</p>
+        <h1>Label episodes with subtasks, plans, memory, interjections and VQA.</h1>
+        <p class="subhead">
+          Aligned with the v3.1 <code>language_persistent</code> / <code>language_events</code> schema
+          (lerobot#3467) and the steerable annotation pipeline (lerobot#3471).
+        </p>
       </div>
       <div class="status" id="status">Disconnected</div>
     </header>
@@ -68,94 +71,251 @@
             <p id="episodeMeta" class="muted"></p>
           </div>
           <div class="viewer-actions">
+            <span class="time-display">
+              <span id="currentTimeDisplay">00:00.000</span> / <span id="totalTimeDisplay">00:00.000</span>
+            </span>
             <button id="saveEpisode" class="ghost">Save episode</button>
             <button id="resetEpisode" class="ghost">Reset</button>
           </div>
         </div>
 
         <div class="video-shell">
-          <video id="episodeVideo" controls preload="metadata"></video>
-          <div class="timeline" id="timeline"></div>
+          <div class="video-stage">
+            <video id="episodeVideo" controls preload="metadata"></video>
+            <canvas id="vqaCanvas" class="vqa-canvas"></canvas>
+          </div>
+          <div class="timeline" id="timeline" title="Persistent atoms (subtask/plan/memory) emitted across the episode"></div>
         </div>
 
         <div class="tabs">
           <button class="tab active" data-tab="subtasks">Subtasks</button>
-          <button class="tab" data-tab="highlevels">High-level prompts</button>
+          <button class="tab" data-tab="plans">Plan</button>
+          <button class="tab" data-tab="memory">Memory</button>
+          <button class="tab" data-tab="interjections">Interjections + Speech</button>
+          <button class="tab" data-tab="vqa">VQA / Bounding boxes</button>
         </div>
 
+        <!-- ============ SUBTASKS (persistent) ============ -->
         <section class="tab-panel active" id="subtasksPanel">
+          <p class="muted small">
+            Persistent <code>subtask</code> atoms — emitted at a timestamp and remain in
+            effect until the next subtask is emitted. Pi0.7 style: capture <em>how</em>, not
+            just <em>what</em> (e.g. "grasp the handle of the sponge with the left hand").
+          </p>
           <div class="segment-form">
             <div class="row">
               <label>
-                Start (s)
+                Emitted at (s)
                 <input id="subtaskStart" type="number" step="0.001" />
               </label>
-              <label>
-                End (s)
-                <input id="subtaskEnd" type="number" step="0.001" />
-              </label>
               <label class="grow">
-                Subtask label
-                <input id="subtaskLabel" type="text" placeholder="pick up block" />
+                Subtask
+                <input id="subtaskLabel" type="text" placeholder="grasp the handle of the sponge with the left hand" />
               </label>
             </div>
             <div class="row">
-              <button id="subtaskSetStart" class="ghost" type="button">Set start from video</button>
-              <button id="subtaskSetEnd" class="ghost" type="button">Set end from video</button>
+              <button id="subtaskSetStart" class="ghost" type="button">Use current frame</button>
               <button id="addSubtask" class="primary" type="button">Add subtask</button>
             </div>
           </div>
           <div id="subtaskList" class="segment-list"></div>
         </section>
 
-        <section class="tab-panel" id="highlevelsPanel">
+        <!-- ============ PLAN (persistent) ============ -->
+        <section class="tab-panel" id="plansPanel">
+          <p class="muted small">
+            Persistent <code>plan</code> atoms — high-level decomposition of the task. The
+            plan is typically emitted at <code>t=0</code> and re-emitted on each user
+            interjection. Multiple lines are kept verbatim.
+          </p>
           <div class="segment-form">
             <div class="row">
               <label>
-                Start (s)
-                <input id="hlStart" type="number" step="0.001" />
-              </label>
-              <label>
-                End (s)
-                <input id="hlEnd" type="number" step="0.001" />
+                Emitted at (s)
+                <input id="planStart" type="number" step="0.001" />
               </label>
               <label class="grow">
-                User prompt
-                <input id="hlUser" type="text" placeholder="Please place the block on the left." />
+                Plan
+                <textarea id="planContent" rows="3" placeholder="1. grab the sponge&#10;2. wipe the counter&#10;3. put items away"></textarea>
               </label>
             </div>
             <div class="row">
-              <label class="grow">
-                Robot response
-                <input id="hlRobot" type="text" placeholder="Got it, moving it now." />
-              </label>
-              <label>
-                Skill (optional)
-                <input id="hlSkill" type="text" placeholder="pick up block" />
-              </label>
-            </div>
-            <div class="row">
-              <label>
-                Scenario type
-                <input id="hlScenario" type="text" placeholder="specific_object" />
-              </label>
-              <label>
-                Response type
-                <input id="hlResponse" type="text" placeholder="confirmation" />
-              </label>
-              <button id="hlSetStart" class="ghost" type="button">Set start from video</button>
-              <button id="hlSetEnd" class="ghost" type="button">Set end from video</button>
-              <button id="addHighLevel" class="primary" type="button">Add high-level</button>
+              <button id="planSetStart" class="ghost" type="button">Use current frame</button>
+              <button id="addPlan" class="primary" type="button">Add plan</button>
             </div>
           </div>
-          <div id="highLevelList" class="segment-list"></div>
+          <div id="planList" class="segment-list"></div>
+        </section>
+
+        <!-- ============ MEMORY (persistent) ============ -->
+        <section class="tab-panel" id="memoryPanel">
+          <p class="muted small">
+            Persistent <code>memory</code> atoms — compressed semantic state. Emit at
+            subtask boundaries. Keep only information relevant for remaining steps; compress
+            completed steps; drop <em>how</em>, keep <em>what</em>; shorter is better.
+          </p>
+          <div class="segment-form">
+            <div class="row">
+              <label>
+                Emitted at (s)
+                <input id="memoryStart" type="number" step="0.001" />
+              </label>
+              <label class="grow">
+                Memory
+                <textarea id="memoryContent" rows="3" placeholder="sponge picked up; counter still dirty; items still on table"></textarea>
+              </label>
+            </div>
+            <div class="row">
+              <button id="memorySetStart" class="ghost" type="button">Use current frame</button>
+              <button id="addMemory" class="primary" type="button">Add memory</button>
+            </div>
+          </div>
+          <div id="memoryList" class="segment-list"></div>
+        </section>
+
+        <!-- ============ INTERJECTIONS + SPEECH (events) ============ -->
+        <section class="tab-panel" id="interjectionsPanel">
+          <p class="muted small">
+            Event atoms in <code>language_events</code> — exact-frame timestamps. A user
+            interjection is paired with an assistant speech tool-call (<code>say</code>);
+            either or both can be emitted. The writer in lerobot#3471 enforces that every
+            interjection has a paired speech atom on the same frame.
+          </p>
+          <div class="segment-form">
+            <div class="row">
+              <label>
+                Emitted at (s)
+                <input id="interjectionStart" type="number" step="0.001" />
+              </label>
+              <label class="grow">
+                User interjection (optional)
+                <input id="interjectionUser" type="text" placeholder="actually skip the wipe, we're short on time" />
+              </label>
+            </div>
+            <div class="row">
+              <label class="grow">
+                Robot speech (optional, becomes a <code>say</code> tool call)
+                <input id="interjectionSpeech" type="text" placeholder="Got it, skipping the wipe." />
+              </label>
+              <button id="interjectionSetStart" class="ghost" type="button">Use current frame</button>
+              <button id="addInterjection" class="primary" type="button">Add</button>
+            </div>
+          </div>
+          <div id="interjectionList" class="segment-list"></div>
+        </section>
+
+        <!-- ============ VQA (events, with bbox/point/etc.) ============ -->
+        <section class="tab-panel" id="vqaPanel">
+          <p class="muted small">
+            Event <code>vqa</code> atoms — exact-frame question/answer pairs. Use the
+            video canvas above to draw bounding boxes (drag) or points (single click). The
+            assistant answer is JSON-encoded into <code>content</code>, matching the schema
+            in the steerable pipeline writer.
+          </p>
+          <div class="segment-form">
+            <div class="row">
+              <label>
+                Question type
+                <select id="vqaType">
+                  <option value="bbox">Bounding box (detection)</option>
+                  <option value="keypoint">Keypoint (single point)</option>
+                  <option value="count">Count</option>
+                  <option value="attribute">Attribute</option>
+                  <option value="spatial">Spatial relation</option>
+                </select>
+              </label>
+              <label>
+                Emitted at (s)
+                <input id="vqaStart" type="number" step="0.001" />
+              </label>
+              <button id="vqaSetStart" class="ghost" type="button">Use current frame</button>
+              <button id="vqaPause" class="ghost" type="button">Pause + draw</button>
+            </div>
+            <div class="row">
+              <label class="grow">
+                Question
+                <input id="vqaQuestion" type="text" placeholder="Where is the carrot in the image?" />
+              </label>
+            </div>
+
+            <!-- bbox / keypoint controls -->
+            <div class="row vqa-control" data-vqa-type="bbox keypoint">
+              <label class="grow">
+                Label
+                <input id="vqaLabel" type="text" placeholder="carrot" />
+              </label>
+              <span class="helper" id="vqaDrawHint">Drag on the video to draw a bounding box. Click to place a point. Press Esc to clear.</span>
+            </div>
+            <div class="row vqa-control" data-vqa-type="bbox keypoint">
+              <span class="helper" id="vqaDrawState">No annotation drawn yet.</span>
+              <button id="vqaClearDraw" class="ghost" type="button">Clear drawing</button>
+            </div>
+
+            <!-- count -->
+            <div class="row vqa-control" data-vqa-type="count" hidden>
+              <label class="grow">
+                Label
+                <input id="vqaCountLabel" type="text" placeholder="cup" />
+              </label>
+              <label>
+                Count
+                <input id="vqaCount" type="number" step="1" min="0" />
+              </label>
+              <label class="grow">
+                Note (optional)
+                <input id="vqaCountNote" type="text" placeholder="two white, one blue" />
+              </label>
+            </div>
+
+            <!-- attribute -->
+            <div class="row vqa-control" data-vqa-type="attribute" hidden>
+              <label class="grow">
+                Label
+                <input id="vqaAttrLabel" type="text" placeholder="towel" />
+              </label>
+              <label>
+                Attribute
+                <input id="vqaAttribute" type="text" placeholder="color" />
+              </label>
+              <label class="grow">
+                Value
+                <input id="vqaAttrValue" type="text" placeholder="red" />
+              </label>
+            </div>
+
+            <!-- spatial -->
+            <div class="row vqa-control" data-vqa-type="spatial" hidden>
+              <label class="grow">
+                Subject
+                <input id="vqaSubject" type="text" placeholder="carrot" />
+              </label>
+              <label>
+                Relation
+                <input id="vqaRelation" type="text" placeholder="right_of" />
+              </label>
+              <label class="grow">
+                Object
+                <input id="vqaObject" type="text" placeholder="towel" />
+              </label>
+            </div>
+
+            <div class="row">
+              <button id="addVqa" class="primary" type="button">Add VQA</button>
+            </div>
+          </div>
+          <div id="vqaList" class="segment-list"></div>
         </section>
       </main>
     </section>
 
     <section class="panel export" id="exportPanel">
       <h2>Export annotated dataset</h2>
-      
+      <p class="muted small">
+        Writes <code>language_persistent</code> and <code>language_events</code> columns
+        (plus the dataset-level <code>tools</code> column) into
+        <code>data/chunk-*/file-*.parquet</code> and drops the legacy <code>subtask_index</code>.
+      </p>
+
       <div class="export-section">
         <h3>Export to local directory</h3>
         <div class="row">
@@ -202,9 +362,9 @@
         <div class="row">
           <label class="grow">
             Commit message
-            <input id="commitMessage" type="text" placeholder="Add annotations" value="Add annotations from LeRobot Annotate" />
+            <input id="commitMessage" type="text" placeholder="Add language annotations" value="Add language annotations from LeRobot Annotate" />
           </label>
-          <button id="pushHubBtn" class="primary" onclick="handlePushToHub()">Push to Hub</button>
+          <button id="pushHubBtn" class="primary">Push to Hub</button>
         </div>
         <div class="helper" id="pushHubStatus"></div>
       </div>
